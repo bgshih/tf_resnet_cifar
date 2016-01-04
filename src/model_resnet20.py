@@ -5,7 +5,7 @@ import math
 import tensorflow as tf
 import numpy as np
 
-import model_utils
+import model_utils as mu
 
 
 FLAGS = tf.app.flags.FLAGS
@@ -75,6 +75,7 @@ def residual_block(x, n_in, n_out, subsample, scope='res_block'):
         y = tf.nn.relu(y, name='relu_1')
         y = conv2d(y, n_out, n_out, 3, 1, 'SAME', True, scope='conv_2')
         y = y + shortcut
+        y = batch_norm(y, n_out, scope='bn_2')
         y = tf.nn.relu(y, name='relu_2')
     return y
 
@@ -92,10 +93,15 @@ def residual_net(x, n, n_classes, scope='res_net'):
         y = conv2d(x, 3, 16, 3, 1, 'SAME', False, scope='conv_init')
         y = batch_norm(y, 16, scope='bn_init')
         y = tf.nn.relu(y, name='relu_init')
+        mu.activation_summary(y)
         y = residual_group(y, 16, 16, n, False, scope='group_1')
+        mu.activation_summary(y)
         y = residual_group(y, 16, 32, n, True, scope='group_2')
+        mu.activation_summary(y)
         y = residual_group(y, 32, 64, n, True, scope='group_3')
+        mu.activation_summary(y)
         y = conv2d(y, 64, n_classes, 1, 1, 'SAME', True, scope='conv_last')
+        mu.activation_summary(y)
         y = tf.nn.avg_pool(y, [1,8,8,1], [1,1,1,1], 'VALID', name='avg_pool')
         y = tf.squeeze(y, squeeze_dims=[1,2])
     return y
@@ -109,6 +115,8 @@ def loss(logits, labels, scope='loss'):
             name='entropy_loss')
         tf.add_to_collection('losses', entropy_loss)
         total_loss = tf.add_n(tf.get_collection('losses'), name='total_loss')
+    for var in tf.get_collection('losses'):
+        tf.scalar_summary('losses/' + var.op.name, var)
     return total_loss
 
 
@@ -177,100 +185,3 @@ def make_validation_batch(test_records_path, batch_size):
                 [test_image, test_label], batch_size=batch_size, num_threads=1,
                 capacity=10000)
     return test_image_batch, test_label_batch
-
-
-# class CnnClassifierModel(object):
-#     def __init__(self, n_classes):
-#         self.global_step = tf.Variable(0, trainable=False)
-#         self.step_count = 0 # the value of global_step
-
-#         with tf.variable_scope('inputs'):
-#             self.ph_image = tf.placeholder(tf.float32)
-#             self.ph_label = tf.placeholder(tf.int64)
-
-#         self.learning_rate = tf.app.flags.FLAGS.learning_rate
-#         log_dir = tf.app.flags.FLAGS.log_dir
-
-#         n = 3
-#         self.logits = residual_net(self.ph_image, n, n_classes)
-
-#         with tf.variable_scope('loss'):
-#             targets = one_hot_embedding(self.ph_label, n_classes)
-#             entropy_loss = tf.reduce_mean(
-#                 tf.nn.softmax_cross_entropy_with_logits(self.logits, targets),
-#                 name='entropy_loss')
-#             tf.add_to_collection('losses', entropy_loss)
-#             self.loss = tf.add_n(tf.get_collection('losses'), name='total_loss')
-#         for var in tf.get_collection('losses'):
-#             tf.scalar_summary(var.op.name, var)
-
-#         with tf.variable_scope('accuracy'):
-#             pred_label = tf.argmax(self.logits, 1)
-#             accuracy = 1.0 - tf.nn.zero_fraction(
-#                 tf.cast(tf.equal(pred_label, self.ph_label), tf.int32))
-#             tf.scalar_summary('accuracy_train', accuracy)
-
-#         with tf.variable_scope('gradients'):
-#             params = tf.trainable_variables()
-#             gradients = tf.gradients(self.loss, params)
-
-#         with tf.variable_scope('optimizer'):
-#             optim = tf.train.MomentumOptimizer(self.learning_rate, 0.9)
-#             self.updates = optim.apply_gradients(
-#                 zip(gradients, params), global_step=self.global_step)
-
-#         # summaries for histograms for all trainable variables
-#         for var in tf.trainable_variables():
-#             tf.histogram_summary(var.op.name, var)
-
-#         # summary writer
-#         self.summary_writer = tf.train.SummaryWriter(log_dir)
-#         self.merged_summary_op = tf.merge_all_summaries()
-
-#         # saver
-#         self.saver = tf.train.Saver(tf.all_variables())
-
-#     def add_graph_summary(self, graph_def):
-#         self.summary_writer.add_graph(graph_def)
-
-#     def step(self, session, images, labels, do_summary=False):
-#         input_feed = {}
-#         input_feed[self.ph_image.name] = images
-#         input_feed[self.ph_label.name] = labels
-#         fetches = [
-#             self.loss,
-#             self.updates
-#         ]
-#         if do_summary:
-#             fetches += [self.merged_summary_op]
-
-#         session_outputs = session.run(fetches, input_feed)
-#         loss_value = session_outputs[0]
-#         self.step_count = int(self.global_step.eval(session))
-
-#         if do_summary:
-#             summary_str = session_outputs[2]
-#             self.summary_writer.add_summary(summary_str, self.step_count)
-#             self.summary_writer.flush()
-
-#         return loss_value
-
-#     def save(self, session, save_dir):
-#         """
-#         Save model to checkpoint.
-#         Args:
-#             session
-#             save_dir: save checkpoint directory
-#         """
-#         self.saver.save(session, save_dir, global_step=self.step_count)
-
-
-#     def load(self, session, load_dir):
-#         """
-#         Load model from checkpoint.
-#         Args:
-#             session
-#             load_dir: load checkpoint directory
-#         """
-#         checkpoint = tf.train.get_checkpoint_state(load_dir)
-#         self.saver.restore(session, checkpoint.model_checkpoint_path)

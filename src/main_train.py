@@ -18,7 +18,6 @@ tf.app.flags.DEFINE_string('train_tf_path', '../data/cifar10/train.tf', '')
 tf.app.flags.DEFINE_string('val_tf_path', '../data/cifar10/test.tf', '')
 tf.app.flags.DEFINE_integer('train_batch_size', 128, '')
 tf.app.flags.DEFINE_integer('val_batch_size', 100, '')
-# tf.app.flags.DEFINE_float('init_lr', 1e-2, 'Initial SGD learning rate.')
 tf.app.flags.DEFINE_float('weight_decay', 1e-4, 'Weight decay')
 tf.app.flags.DEFINE_integer('summary_interval', 100, 'Interval for summary.')
 tf.app.flags.DEFINE_integer('val_interval', 1000, 'Interval for evaluation.')
@@ -51,6 +50,8 @@ def train_and_val():
         # total loss
         loss = m.loss(logits, label_batch)
         accuracy = m.accuracy(logits, label_batch)
+        tf.scalar_summary('train_loss', loss)
+        tf.scalar_summary('train_accuracy', accuracy)
 
         # train one step
         train_op = m.train_op(loss, global_step, learning_rate)
@@ -64,6 +65,8 @@ def train_and_val():
         # summary
         summary_op = tf.merge_all_summaries()
         summary_writer = tf.train.SummaryWriter(FLAGS.log_dir, graph_def=sess.graph_def)
+        for var in tf.trainable_variables():
+            tf.histogram_summary('params/' + var.op.name, var)
 
         # initialization (TODO: or load)
         init_op = tf.initialize_all_variables()
@@ -74,11 +77,9 @@ def train_and_val():
         curr_lr = 0.0
         for step in xrange(FLAGS.max_steps):
             # set learning rate manually
-            if step <= 3000:
-                _lr = 1e-2
-            elif step <= 32000:
+            if step <= 32000:
                 _lr = 1e-1
-            elif step <= 64000:
+            elif step <= 48000:
                 _lr = 1e-2
             else:
                 _lr = 1e-3

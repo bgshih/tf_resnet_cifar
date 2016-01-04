@@ -28,7 +28,7 @@ def conv_map_montage(conv_maps):
 
 def activation_summary(x):
     tensor_name = x.op.name
-    tf.histogram_summary(tensor_name + '/activations', x)
+    tf.histogram_summary('activations/' + tensor_name, x)
     # tf.scalar_summary(tensor_name + '/max', tf.reduce_max(x))
     # tf.scalar_summary(tensor_name + '/min', tf.reduce_min(x))
     # tf.scalar_summary(tensor_name + '/mean', tf.reduce_mean(x))
@@ -63,3 +63,4 @@ def add_loss_summaries(total_loss):
         tf.scalar_summary(l.op.name, loss_averages.average(l))
 
     return loss_averages_op
+
