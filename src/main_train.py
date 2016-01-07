@@ -13,7 +13,7 @@ import model_resnet20 as m
 
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string('load_dir', '', '')
-tf.app.flags.DEFINE_integer('residual_net_n', 3, '')
+tf.app.flags.DEFINE_integer('residual_net_n', 5, '')
 tf.app.flags.DEFINE_string('train_tf_path', '../data/cifar10/train.tf', '')
 tf.app.flags.DEFINE_string('val_tf_path', '../data/cifar10/test.tf', '')
 tf.app.flags.DEFINE_integer('train_batch_size', 128, '')
@@ -45,7 +45,7 @@ def train_and_val():
             lambda: (val_image_batch, val_label_batch))
 
         # model outputs
-        logits = m.residual_net(image_batch, FLAGS.residual_net_n, 10)
+        logits = m.residual_net(image_batch, FLAGS.residual_net_n, 10, phase_train)
 
         # total loss
         loss = m.loss(logits, label_batch)
@@ -70,7 +70,8 @@ def train_and_val():
 
         # initialization (TODO: or load)
         init_op = tf.initialize_all_variables()
-        sess.run(init_op)
+        print('Initializing...')
+        sess.run(init_op, {phase_train.name: True})
 
         # train loop
         tf.train.start_queue_runners(sess=sess)
@@ -98,7 +99,7 @@ def train_and_val():
                     (datetime.now(), step, train_loss_value, train_acc_value))
                 summary_writer.add_summary(summary_str, step)
 
-            if step % FLAGS.val_interval == 0:
+            if step > 0 and step % FLAGS.val_interval == 0:
                 print('Evaluating...')
                 n_val_samples = 10000
                 val_batch_size = FLAGS.val_batch_size

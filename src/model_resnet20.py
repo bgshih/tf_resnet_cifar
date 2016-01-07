@@ -3,6 +3,7 @@ from __future__ import division
 import ipdb
 import math
 import tensorflow as tf
+from tensorflow.python import control_flow_ops
 import numpy as np
 
 import model_utils as mu
@@ -28,42 +29,57 @@ def one_hot_embedding(label, n_classes):
 
 
 def conv2d(x, n_in, n_out, k, s, p='SAME', bias=False, scope='conv'):
-    bias = True # TESTME
     with tf.variable_scope(scope):
         kernel = tf.Variable(
             tf.truncated_normal([k, k, n_in, n_out],
                 stddev=math.sqrt(2/(k*k*n_out))),
             name='weight')
-        weight_decay = tf.mul(tf.nn.l2_loss(kernel), FLAGS.weight_decay, 'weight_decay_loss')
-        tf.add_to_collection('losses', weight_decay)
+        tf.add_to_collection('weights', kernel)
         conv = tf.nn.conv2d(x, kernel, [1,s,s,1], padding=p)
         if bias:
             bias = tf.Variable(tf.zeros([n_out]), name='bias')
+            tf.add_to_collection('biases', bias)
             conv = tf.nn.bias_add(conv, bias)
     return conv
 
 
-def batch_norm(x, n_out, scope='bn', affine=True):
-    def mean_var(x, axes, name=None):
-        divisor = 1
-        for d in xrange(len(x.get_shape())):
-            if d in axes:
-                divisor *= tf.shape(x)[d]
-        divisor = 1.0 / tf.cast(divisor, tf.float32)
-        mean = tf.mul(tf.reduce_sum(x, axes), divisor)
-        var = tf.mul(tf.reduce_sum(tf.square(x - mean), axes), divisor)
-        return mean, var
-
+def batch_norm(x, n_out, phase_train, scope='bn', affine=True):
+    """
+    Batch normalization on convolutional maps.
+    Args:
+        x: Tensor, 4D BHWD input maps
+        n_out: integer, depth of input maps
+        phase_train: boolean tf.Variable, true indicates training phase
+        scope: string, variable scope
+        affine: whether to affine-transform outputs
+    Return:
+        normed: batch-normalized maps
+    """
     with tf.variable_scope(scope):
-        mean, var = mean_var(x, axes=[0,1,2])
-        beta = tf.Variable(tf.constant(0.0, shape=[n_out]), name='beta', trainable=affine)
-        gamma = tf.Variable(tf.constant(1.0, shape=[n_out]), name='gamma', trainable=affine)
+        beta = tf.Variable(tf.constant(0.0, shape=[n_out]),
+            name='beta', trainable=True)
+        gamma = tf.Variable(tf.constant(1.0, shape=[n_out]),
+            name='gamma', trainable=affine)
+        tf.add_to_collection('biases', beta)
+        tf.add_to_collection('weights', gamma)
+
+        batch_mean, batch_var = tf.nn.moments(x, [0,1,2], name='moments')
+        ema = tf.train.ExponentialMovingAverage(decay=0.9)
+        ema_apply_op = ema.apply([batch_mean, batch_var])
+        ema_mean, ema_var = ema.average(batch_mean), ema.average(batch_var)
+        def mean_var_with_update():
+            with tf.control_dependencies([ema_apply_op]):
+                return tf.identity(batch_mean), tf.identity(batch_var)
+        mean, var = control_flow_ops.cond(phase_train,
+            mean_var_with_update,
+            lambda: (ema_mean, ema_var))
+
         normed = tf.nn.batch_norm_with_global_normalization(x, mean, var,
-            beta, gamma, 1e-3, True)
+            beta, gamma, 1e-3, affine)
     return normed
 
 
-def residual_block(x, n_in, n_out, subsample, scope='res_block'):
+def residual_block(x, n_in, n_out, subsample, phase_train, scope='res_block'):
     with tf.variable_scope(scope):
         if subsample:
             y = conv2d(x, n_in, n_out, 3, 2, 'SAME', False, scope='conv_1')
@@ -71,34 +87,35 @@ def residual_block(x, n_in, n_out, subsample, scope='res_block'):
         else:
             y = conv2d(x, n_in, n_out, 3, 1, 'SAME', False, scope='conv_1')
             shortcut = tf.identity(x, name='shortcut')
-        y = batch_norm(y, n_out, scope='bn_1')
+        y = batch_norm(y, n_out, phase_train, scope='bn_1')
         y = tf.nn.relu(y, name='relu_1')
         y = conv2d(y, n_out, n_out, 3, 1, 'SAME', True, scope='conv_2')
         y = y + shortcut
-        y = batch_norm(y, n_out, scope='bn_2')
+        y = batch_norm(y, n_out, phase_train, scope='bn_2')
         y = tf.nn.relu(y, name='relu_2')
     return y
 
 
-def residual_group(x, n_in, n_out, n, first_subsample, scope='res_group'):
+def residual_group(x, n_in, n_out, n, first_subsample, phase_train, scope='res_group'):
     with tf.variable_scope(scope):
-        y = residual_block(x, n_in, n_out, first_subsample, scope='block_1')
+        y = residual_block(x, n_in, n_out, first_subsample, phase_train, scope='block_1')
         for i in xrange(n-1):
-            y = residual_block(y, n_out, n_out, False, scope='block_%d' % (i+2))
+            y = residual_block(y, n_out, n_out, False, phase_train, scope='block_%d' % (i+2))
     return y
 
 
-def residual_net(x, n, n_classes, scope='res_net'):
+def residual_net(x, n, n_classes, phase_train, scope='res_net'):
     with tf.variable_scope(scope):
+        mu.activation_summary(x)
         y = conv2d(x, 3, 16, 3, 1, 'SAME', False, scope='conv_init')
-        y = batch_norm(y, 16, scope='bn_init')
+        y = batch_norm(y, 16, phase_train, scope='bn_init')
         y = tf.nn.relu(y, name='relu_init')
         mu.activation_summary(y)
-        y = residual_group(y, 16, 16, n, False, scope='group_1')
+        y = residual_group(y, 16, 16, n, False, phase_train, scope='group_1')
         mu.activation_summary(y)
-        y = residual_group(y, 16, 32, n, True, scope='group_2')
+        y = residual_group(y, 16, 32, n, True, phase_train, scope='group_2')
         mu.activation_summary(y)
-        y = residual_group(y, 32, 64, n, True, scope='group_3')
+        y = residual_group(y, 32, 64, n, True, phase_train, scope='group_3')
         mu.activation_summary(y)
         y = conv2d(y, 64, n_classes, 1, 1, 'SAME', True, scope='conv_last')
         mu.activation_summary(y)
@@ -109,12 +126,22 @@ def residual_net(x, n, n_classes, scope='res_net'):
 
 def loss(logits, labels, scope='loss'):
     with tf.variable_scope(scope):
+        # entropy loss
         targets = one_hot_embedding(labels, 10)
         entropy_loss = tf.reduce_mean(
             tf.nn.softmax_cross_entropy_with_logits(logits, targets),
             name='entropy_loss')
         tf.add_to_collection('losses', entropy_loss)
+
+        # weight l2 decay loss
+        weight_l2_losses = [tf.nn.l2_loss(o) for o in tf.get_collection('weights')]
+        weight_decay_loss = tf.mul(FLAGS.weight_decay, tf.add_n(weight_l2_losses),
+            name='weight_decay_loss')
+        tf.add_to_collection('losses', weight_decay_loss)
+
+        # total loss
         total_loss = tf.add_n(tf.get_collection('losses'), name='total_loss')
+
     for var in tf.get_collection('losses'):
         tf.scalar_summary('losses/' + var.op.name, var)
     return total_loss
@@ -128,15 +155,25 @@ def accuracy(logits, gt_label, scope='accuracy'):
     return acc
 
 
-def train_op(train_loss, global_step, learning_rate):
+def train_op(loss, global_step, learning_rate):
     tf.scalar_summary('learning_rate', learning_rate)
-    optim = tf.train.MomentumOptimizer(learning_rate, 0.9)
-    params = tf.trainable_variables()
-    gradients = tf.gradients(train_loss, params)
-    updates = optim.apply_gradients(
-        zip(gradients, params), global_step=global_step)
-    with tf.control_dependencies([updates]):
-        train_op = tf.no_op(name='train')
+    learning_rate_weights = learning_rate
+    learning_rate_biases = 2.0 * learning_rate # double learning rate for biases
+
+    weights, biases = tf.get_collection('weights'), tf.get_collection('biases')
+    assert(len(weights) + len(biases) == len(tf.trainable_variables()))
+    params = weights + biases
+    gradients = tf.gradients(loss, params, name='gradients')
+    gradient_weights = gradients[:len(weights)]
+    gradient_biases = gradients[len(weights):]
+
+    optim_weights = tf.train.MomentumOptimizer(learning_rate_weights, 0.9)
+    optim_biases = tf.train.MomentumOptimizer(learning_rate_biases, 0.9)
+    update_weights = optim_weights.apply_gradients(zip(gradient_weights, weights))
+    update_biases = optim_biases.apply_gradients(zip(gradient_biases, biases))
+
+    with tf.control_dependencies([update_weights, update_biases]):
+        train_op = tf.no_op(name='train_op')
     return train_op
 
 
