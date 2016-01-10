@@ -76,14 +76,15 @@ def train_and_val():
         # train loop
         tf.train.start_queue_runners(sess=sess)
         curr_lr = 0.0
+        lr_scale = 2.0
         for step in xrange(FLAGS.max_steps):
             # set learning rate manually
             if step <= 32000:
-                _lr = 1e-1
+                _lr = lr_scale * 1e-1
             elif step <= 48000:
-                _lr = 1e-2
+                _lr = lr_scale * 1e-2
             else:
-                _lr = 1e-3
+                _lr = lr_scale * 1e-3
             if curr_lr != _lr:
                 curr_lr = _lr
                 print('Learning rate set to %f' % curr_lr)
