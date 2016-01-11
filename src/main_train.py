@@ -8,7 +8,7 @@ import tensorflow as tf
 from tensorflow.python import control_flow_ops
 import joblib
 
-import model_resnet20 as m
+import model_resnet as m
 
 
 FLAGS = tf.app.flags.FLAGS
@@ -76,7 +76,7 @@ def train_and_val():
         # train loop
         tf.train.start_queue_runners(sess=sess)
         curr_lr = 0.0
-        lr_scale = 2.0
+        lr_scale = 1.0
         for step in xrange(FLAGS.max_steps):
             # set learning rate manually
             if step <= 32000:

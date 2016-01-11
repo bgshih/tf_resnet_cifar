@@ -106,19 +106,13 @@ def residual_group(x, n_in, n_out, n, first_subsample, phase_train, scope='res_g
 
 def residual_net(x, n, n_classes, phase_train, scope='res_net'):
     with tf.variable_scope(scope):
-        mu.activation_summary(x)
         y = conv2d(x, 3, 16, 3, 1, 'SAME', False, scope='conv_init')
         y = batch_norm(y, 16, phase_train, scope='bn_init')
         y = tf.nn.relu(y, name='relu_init')
-        mu.activation_summary(y)
         y = residual_group(y, 16, 16, n, False, phase_train, scope='group_1')
-        mu.activation_summary(y)
         y = residual_group(y, 16, 32, n, True, phase_train, scope='group_2')
-        mu.activation_summary(y)
         y = residual_group(y, 32, 64, n, True, phase_train, scope='group_3')
-        mu.activation_summary(y)
         y = conv2d(y, 64, n_classes, 1, 1, 'SAME', True, scope='conv_last')
-        mu.activation_summary(y)
         y = tf.nn.avg_pool(y, [1,8,8,1], [1,1,1,1], 'VALID', name='avg_pool')
         y = tf.squeeze(y, squeeze_dims=[1,2])
     return y
@@ -191,6 +185,12 @@ def cifar10_input_stream(records_path):
     return image, label
 
 
+def normalize_image(image):
+    image = tf.image.per_image_whitening(image)
+    image = image / 6.0
+    return image
+
+
 def random_distort_image(image):
     distorted_image = image
     distorted_image = tf.image.pad_to_bounding_box(image, 4, 4, 40, 40) # pad 4 pixels to each side
@@ -198,7 +198,6 @@ def random_distort_image(image):
     distorted_image = tf.image.random_flip_left_right(distorted_image)
     # distorted_image = tf.image.random_brightness(distorted_image, max_delta=63)
     # distorted_image = tf.image.random_contrast(distorted_image, lower=0.2, upper=1.8)
-    # distorted_image = tf.image.per_image_whitening(distorted_image)
     return distorted_image
 
 
@@ -206,6 +205,7 @@ def make_train_batch(train_records_path, batch_size):
     with tf.variable_scope('train_batch'):
         with tf.device('/cpu:0'):
             train_image, train_label = cifar10_input_stream(train_records_path)
+            train_image = normalize_image(train_image)
             train_image = random_distort_image(train_image)
             train_image_batch, train_label_batch = tf.train.shuffle_batch(
                 [train_image, train_label], batch_size=batch_size, num_threads=4,
@@ -218,6 +218,7 @@ def make_validation_batch(test_records_path, batch_size):
     with tf.variable_scope('evaluate_batch'):
         with tf.device('/cpu:0'):
             test_image, test_label = cifar10_input_stream(test_records_path)
+            test_image = normalize_image(test_image)
             test_image_batch, test_label_batch = tf.train.batch(
                 [test_image, test_label], batch_size=batch_size, num_threads=1,
                 capacity=10000)
