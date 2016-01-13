@@ -186,8 +186,8 @@ def cifar10_input_stream(records_path):
 
 
 def normalize_image(image):
-    image = tf.image.per_image_whitening(image)
-    image = image / 6.0
+    # image = tf.image.per_image_whitening(image)
+    # image = image / 6.0
     return image
 
 
@@ -205,7 +205,7 @@ def make_train_batch(train_records_path, batch_size):
     with tf.variable_scope('train_batch'):
         with tf.device('/cpu:0'):
             train_image, train_label = cifar10_input_stream(train_records_path)
-            train_image = normalize_image(train_image)
+            # train_image = normalize_image(train_image)
             train_image = random_distort_image(train_image)
             train_image_batch, train_label_batch = tf.train.shuffle_batch(
                 [train_image, train_label], batch_size=batch_size, num_threads=4,
@@ -218,7 +218,7 @@ def make_validation_batch(test_records_path, batch_size):
     with tf.variable_scope('evaluate_batch'):
         with tf.device('/cpu:0'):
             test_image, test_label = cifar10_input_stream(test_records_path)
-            test_image = normalize_image(test_image)
+            # test_image = normalize_image(test_image)
             test_image_batch, test_label_batch = tf.train.batch(
                 [test_image, test_label], batch_size=batch_size, num_threads=1,
                 capacity=10000)

@@ -2,6 +2,7 @@
 log.txt
 *.pyc
 data/
+logs_cifar10/
 =======
 # Byte-compiled / optimized / DLL files
 __pycache__/

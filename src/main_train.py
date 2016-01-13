@@ -14,8 +14,8 @@ import model_resnet as m
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string('load_dir', '', '')
 tf.app.flags.DEFINE_integer('residual_net_n', 5, '')
-tf.app.flags.DEFINE_string('train_tf_path', '../data/cifar10/train.tf', '')
-tf.app.flags.DEFINE_string('val_tf_path', '../data/cifar10/test.tf', '')
+tf.app.flags.DEFINE_string('train_tf_path', '../data/cifar10/train_cstnorm.tf', '')
+tf.app.flags.DEFINE_string('val_tf_path', '../data/cifar10/test_cstnorm.tf', '')
 tf.app.flags.DEFINE_integer('train_batch_size', 128, '')
 tf.app.flags.DEFINE_integer('val_batch_size', 100, '')
 tf.app.flags.DEFINE_float('weight_decay', 1e-4, 'Weight decay')
