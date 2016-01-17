@@ -12,6 +12,7 @@ import model_utils as mu
 FLAGS = tf.app.flags.FLAGS
 
 
+# TODO set on gpu
 def one_hot_embedding(label, n_classes):
     """
     One-hot embedding
@@ -28,16 +29,20 @@ def one_hot_embedding(label, n_classes):
     return embedding
 
 
+def _variable_on_cpu(name, shape, initializer, trainable=True):
+    with tf.device('/cpu:0'):
+        var = tf.get_variable(name, shape=shape, initializer=initializer, trainable=trainable)
+    return var
+
+
 def conv2d(x, n_in, n_out, k, s, p='SAME', bias=False, scope='conv'):
     with tf.variable_scope(scope):
-        kernel = tf.Variable(
-            tf.truncated_normal([k, k, n_in, n_out],
-                stddev=math.sqrt(2/(k*k*n_out))),
-            name='weight')
+        kernel = _variable_on_cpu('weight', [k, k, n_in, n_out],
+                                  tf.truncated_normal([k, k, n_in, n_out], stddev=math.sqrt(2 / (k * k * n_out))))
         tf.add_to_collection('weights', kernel)
-        conv = tf.nn.conv2d(x, kernel, [1,s,s,1], padding=p)
+        conv = tf.nn.conv2d(x, kernel, [1, s, s, 1], padding=p)
         if bias:
-            bias = tf.Variable(tf.zeros([n_out]), name='bias')
+            bias = _variable_on_cpu('bias', [n_out], tf.zeros([n_out]))
             tf.add_to_collection('biases', bias)
             conv = tf.nn.bias_add(conv, bias)
     return conv
@@ -56,10 +61,8 @@ def batch_norm(x, n_out, phase_train, scope='bn', affine=True):
         normed: batch-normalized maps
     """
     with tf.variable_scope(scope):
-        beta = tf.Variable(tf.constant(0.0, shape=[n_out]),
-            name='beta', trainable=True)
-        gamma = tf.Variable(tf.constant(1.0, shape=[n_out]),
-            name='gamma', trainable=affine)
+        beta = _variable_on_cpu('beta', [n_out], tf.constant(0.0, shape=[n_out]))
+        gamma = _variable_on_cpu('gamma', [n_out], tf.constant(0.0, shape=[n_out]), affine)
         tf.add_to_collection('biases', beta)
         tf.add_to_collection('weights', gamma)
 
@@ -67,15 +70,16 @@ def batch_norm(x, n_out, phase_train, scope='bn', affine=True):
         ema = tf.train.ExponentialMovingAverage(decay=0.999)
         ema_apply_op = ema.apply([batch_mean, batch_var])
         ema_mean, ema_var = ema.average(batch_mean), ema.average(batch_var)
+
         def mean_var_with_update():
             with tf.control_dependencies([ema_apply_op]):
                 return tf.identity(batch_mean), tf.identity(batch_var)
         mean, var = control_flow_ops.cond(phase_train,
-            mean_var_with_update,
-            lambda: (ema_mean, ema_var))
+                                          mean_var_with_update,
+                                          lambda: (ema_mean, ema_var))
 
         normed = tf.nn.batch_norm_with_global_normalization(x, mean, var,
-            beta, gamma, 1e-3, affine)
+                                                            beta, gamma, 1e-3, affine)
     return normed
 
 
@@ -83,7 +87,8 @@ def residual_block(x, n_in, n_out, subsample, phase_train, scope='res_block'):
     with tf.variable_scope(scope):
         if subsample:
             y = conv2d(x, n_in, n_out, 3, 2, 'SAME', False, scope='conv_1')
-            shortcut = conv2d(x, n_in, n_out, 3, 2, 'SAME', False, scope='shortcut')
+            shortcut = conv2d(x, n_in, n_out, 3, 2, 'SAME',
+                              False, scope='shortcut')
         else:
             y = conv2d(x, n_in, n_out, 3, 1, 'SAME', False, scope='conv_1')
             shortcut = tf.identity(x, name='shortcut')
@@ -98,9 +103,11 @@ def residual_block(x, n_in, n_out, subsample, phase_train, scope='res_block'):
 
 def residual_group(x, n_in, n_out, n, first_subsample, phase_train, scope='res_group'):
     with tf.variable_scope(scope):
-        y = residual_block(x, n_in, n_out, first_subsample, phase_train, scope='block_1')
-        for i in xrange(n-1):
-            y = residual_block(y, n_out, n_out, False, phase_train, scope='block_%d' % (i+2))
+        y = residual_block(x, n_in, n_out, first_subsample,
+                           phase_train, scope='block_1')
+        for i in xrange(n - 1):
+            y = residual_block(y, n_out, n_out, False,
+                               phase_train, scope='block_%d' % (i + 2))
     return y
 
 
@@ -113,8 +120,9 @@ def residual_net(x, n, n_classes, phase_train, scope='res_net'):
         y = residual_group(y, 16, 32, n, True, phase_train, scope='group_2')
         y = residual_group(y, 32, 64, n, True, phase_train, scope='group_3')
         y = conv2d(y, 64, n_classes, 1, 1, 'SAME', True, scope='conv_last')
-        y = tf.nn.avg_pool(y, [1,8,8,1], [1,1,1,1], 'VALID', name='avg_pool')
-        y = tf.squeeze(y, squeeze_dims=[1,2])
+        y = tf.nn.avg_pool(y, [1, 8, 8, 1], [1, 1, 1, 1],
+                           'VALID', name='avg_pool')
+        y = tf.squeeze(y, squeeze_dims=[1, 2])
     return y
 
 
@@ -128,9 +136,10 @@ def loss(logits, labels, scope='loss'):
         tf.add_to_collection('losses', entropy_loss)
 
         # weight l2 decay loss
-        weight_l2_losses = [tf.nn.l2_loss(o) for o in tf.get_collection('weights')]
+        weight_l2_losses = [tf.nn.l2_loss(o)
+                            for o in tf.get_collection('weights')]
         weight_decay_loss = tf.mul(FLAGS.weight_decay, tf.add_n(weight_l2_losses),
-            name='weight_decay_loss')
+                                   name='weight_decay_loss')
         tf.add_to_collection('losses', weight_decay_loss)
 
         # total loss
@@ -152,7 +161,7 @@ def accuracy(logits, gt_label, scope='accuracy'):
 def train_op(loss, global_step, learning_rate):
     tf.scalar_summary('learning_rate', learning_rate)
     learning_rate_weights = learning_rate
-    learning_rate_biases = 2.0 * learning_rate # double learning rate for biases
+    learning_rate_biases = 2.0 * learning_rate  # double learning rate for biases
 
     weights, biases = tf.get_collection('weights'), tf.get_collection('biases')
     assert(len(weights) + len(biases) == len(tf.trainable_variables()))
@@ -163,7 +172,8 @@ def train_op(loss, global_step, learning_rate):
 
     optim_weights = tf.train.MomentumOptimizer(learning_rate_weights, 0.9)
     optim_biases = tf.train.MomentumOptimizer(learning_rate_biases, 0.9)
-    update_weights = optim_weights.apply_gradients(zip(gradient_weights, weights))
+    update_weights = optim_weights.apply_gradients(
+        zip(gradient_weights, weights))
     update_biases = optim_biases.apply_gradients(zip(gradient_biases, biases))
 
     with tf.control_dependencies([update_weights, update_biases]):
@@ -180,7 +190,7 @@ def cifar10_input_stream(records_path):
         dense_keys=['image_raw', 'label'],
         dense_types=[tf.string, tf.int64])
     image = tf.decode_raw(features['image_raw'], tf.float32)
-    image = tf.reshape(image, [32,32,3])
+    image = tf.reshape(image, [32, 32, 3])
     label = tf.cast(features['label'], tf.int64)
     return image, label
 
@@ -193,7 +203,8 @@ def normalize_image(image):
 
 def random_distort_image(image):
     distorted_image = image
-    distorted_image = tf.image.pad_to_bounding_box(image, 4, 4, 40, 40) # pad 4 pixels to each side
+    distorted_image = tf.image.pad_to_bounding_box(
+        image, 4, 4, 40, 40)  # pad 4 pixels to each side
     distorted_image = tf.image.random_crop(distorted_image, [32, 32])
     distorted_image = tf.image.random_flip_left_right(distorted_image)
     # distorted_image = tf.image.random_brightness(distorted_image, max_delta=63)
