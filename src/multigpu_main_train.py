@@ -81,7 +81,9 @@ def train_and_eval():
             # set up train_op
             weights, biases = tf.get_collection(
                     'weights'), tf.get_collection('biases')
-            weights_grads, biases_grads = average_gradients(gpu_grads)
+            averaged_grads = average_gradients(gpu_grads)
+            weights_grads = averaged_grads[:len(weights)]
+            biases_grads = averaged_grads[len(weights):]
             apply_weights_op = optim_weights.apply_gradients([weights_grads, weights], global_step=global_step)
             apply_biases_op = optim_biases.apply_gradients([biases_grads, biases], global_step=global_step)
             train_op = tf.group(apply_weights_op, apply_biases_op)
