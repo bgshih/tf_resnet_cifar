@@ -18,9 +18,9 @@ FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string('load_dir', '', '')
 tf.app.flags.DEFINE_integer('residual_net_n', 5, '')
 tf.app.flags.DEFINE_string(
-    'train_tf_path', '../data/cifar10/train_cstnorm.tf', '')
+    'train_tf_path', '../data/cifar10/train.tf', '')
 tf.app.flags.DEFINE_string(
-    'val_tf_path', '../data/cifar10/test_cstnorm.tf', '')
+    'val_tf_path', '../data/cifar10/test.tf', '')
 tf.app.flags.DEFINE_integer('train_batch_size', 128, '')
 tf.app.flags.DEFINE_integer('val_batch_size', 100, '')
 tf.app.flags.DEFINE_float('weight_decay', 1e-4, 'Weight decay')
@@ -189,6 +189,8 @@ def loss_and_accuracy_per_gpu(phase_train):
                                                          train_image_batch, train_label_batch),
                                                      lambda: (val_image_batch, val_label_batch))
 
+    print(train_image_batch.get_shape())
+    print(image_batch.get_shape())
     # model outputs
     logits = m.residual_net(
         image_batch, FLAGS.residual_net_n, 10, phase_train)
@@ -203,4 +205,4 @@ def loss_and_accuracy_per_gpu(phase_train):
 
 if __name__ == '__main__':
     pass
-    #  train_and_val()
+    train_and_eval()
