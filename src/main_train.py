@@ -44,8 +44,6 @@ def train_and_val():
             lambda: (train_image_batch, train_label_batch),
             lambda: (val_image_batch, val_label_batch))
 
-        print(val_image_batch.get_shape(), train_image_batch.get_shape())
-
         # model outputs
         logits = m.residual_net(image_batch, FLAGS.residual_net_n, 10, phase_train)
 

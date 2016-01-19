@@ -31,7 +31,8 @@ tf.app.flags.DEFINE_integer(
 tf.app.flags.DEFINE_string(
     'log_dir', '../logs_cifar10/log_%s' % time.strftime("%Y%m%d_%H%M%S"), '')
 tf.app.flags.DEFINE_integer('save_interval', 5000, '')
-tf.app.flags.DEFINE_integer('num_gpu', 2, '')
+#  tf.app.flags.DEFINE_integer('num_gpu', 2, '')
+tf.app.flags.DEFINE_integer('num_gpu', 1, '')
 
 
 def train_and_eval():
@@ -58,17 +59,25 @@ def train_and_eval():
         gpu_grads = []
         # per gpu
         for i in xrange(FLAGS.num_gpu):
+            print('Initialize the {0}th gpu'.format(i))
             with tf.device('/gpu:{0}'.format(i)):
                 with tf.name_scope('gpu_{0}'.format(i)):
-                    loss, accuracy, logits = loss_and_accuracy_per_gpu(phase_train)
+                    if i > 0:
+                        m.add_to_collection = False
+
+                    loss, accuracy, logits = loss_and_accuracy_per_gpu(
+                        phase_train)
 
                     # Reuse variables
                     tf.get_variable_scope().reuse_variables()
 
                     weights, biases = tf.get_collection(
                         'weights'), tf.get_collection('biases')
-                    assert(len(weights) + len(biases) ==
-                           len(tf.trainable_variables()))
+                    #  print('weights len:{0}'.format(len(weights)))
+                    #  print("len trainalbe variable:{0}".format(
+                        #  len(tf.trainable_variables())))
+                    assert(len(weights) + len(biases) == len(tf.trainable_variables()))
+
                     params = weights + biases
                     gradients = tf.gradients(loss, params, name='gradients')
                     #  gradient_weights = gradients[:len(weights)]
@@ -80,23 +89,27 @@ def train_and_eval():
         with tf.device('/cpu:0'):
             # set up train_op
             weights, biases = tf.get_collection(
-                    'weights'), tf.get_collection('biases')
+                'weights'), tf.get_collection('biases')
             averaged_grads = average_gradients(gpu_grads)
             weights_grads = averaged_grads[:len(weights)]
             biases_grads = averaged_grads[len(weights):]
-            apply_weights_op = optim_weights.apply_gradients([weights_grads, weights], global_step=global_step)
-            apply_biases_op = optim_biases.apply_gradients([biases_grads, biases], global_step=global_step)
+            apply_weights_op = optim_weights.apply_gradients(
+                zip(weights_grads, weights), global_step=global_step)
+            apply_biases_op = optim_biases.apply_gradients(
+                zip(biases_grads, biases), global_step=global_step)
             train_op = tf.group(apply_weights_op, apply_biases_op)
 
             # saver
             saver = tf.train.Saver(tf.all_variables())
 
             # start session
-            sess = tf.Session(config=tf.ConfigProto(log_device_placement=False))
+            sess = tf.Session(config=tf.ConfigProto(
+                log_device_placement=False))
 
             # summary
             summary_op = tf.merge_all_summaries()
-            summary_writer = tf.train.SummaryWriter(FLAGS.log_dir, graph_def=sess.graph_def)
+            summary_writer = tf.train.SummaryWriter(
+                FLAGS.log_dir, graph_def=sess.graph_def)
             for var in tf.trainable_variables():
                 tf.histogram_summary('params/' + var.op.name, var)
 
@@ -125,15 +138,17 @@ def train_and_eval():
             fetches = [train_op, loss]
             if step % FLAGS.summary_interval == 0:
                 fetches += [accuracy, summary_op]
-            sess_outputs = sess.run(fetches, {phase_train.name: True, learning_rate.name: curr_lr})
+            sess_outputs = sess.run(
+                fetches, {phase_train.name: True, learning_rate.name: curr_lr})
 
+            print(sess_outputs)
             if step % FLAGS.summary_interval == 0:
-                train_loss_value, train_acc_value, summary_str = sess_outputs[1:]
+                train_loss_value, train_acc_value, summary_str = sess_outputs[
+                    1:]
                 print('[%s] Iteration %d, train loss = %f, train accuracy = %f' %
-                    (datetime.now(), step, train_loss_value, train_acc_value))
+                      (datetime.now(), step, train_loss_value, train_acc_value))
                 summary_writer.add_summary(summary_str, step)
 
-            # TODO implement accuracy calculate
             if step > 0 and step % FLAGS.val_interval == 0:
                 print('Evaluating...')
                 n_val_samples = 10000
@@ -143,14 +158,16 @@ def train_and_eval():
                 val_accuracies = []
                 for i in xrange(n_val_batch):
                     fetches = [accuracy, loss]
-                    session_outputs = sess.run(fetches, {phase_train.name: False})
+                    session_outputs = sess.run(
+                        fetches, {phase_train.name: False})
                     val_accuracies.append(session_outputs[0])
                     val_losses.append(session_outputs[1])
                 val_accuracy = float(np.mean(np.asarray(val_accuracies)))
                 val_loss = float(np.mean(np.asarray(val_losses)))
                 print('Test accuracy = %f' % val_accuracy)
                 val_summary = tf.Summary()
-                val_summary.value.add(tag='val_accuracy', simple_value=val_accuracy)
+                val_summary.value.add(tag='val_accuracy',
+                                      simple_value=val_accuracy)
                 val_summary.value.add(tag='val_loss', simple_value=val_loss)
                 summary_writer.add_summary(val_summary, step)
 
@@ -160,18 +177,17 @@ def train_and_eval():
                 print('Checkpoint saved at %s' % checkpoint_path)
 
 
-# TODO modify to fit demand
 def average_gradients(gpu_grads):
     if len(gpu_grads) is 1:
-        return gpu_grads
+        return gpu_grads[0]
 
-    expand_grads = [[] for i in len(gpu_grads[0])]
+    expand_grads = [[] for i in xrange(len(gpu_grads[0]))]
     average_grads = []
     for one_gpu_grad in gpu_grads:
         for i in xrange(len(one_gpu_grad)):
             expand_grads[i].append(tf.expand_dims(one_gpu_grad[i], 0))
     #  y = tf.concat(0, expand_grads)
-    for x in len(expand_grads):
+    for x in xrange(len(expand_grads)):
         y = tf.concat(0, expand_grads[i])
         average_grad = tf.reduce_mean(y, 0)
         average_grads.append(average_grad)
@@ -189,8 +205,6 @@ def loss_and_accuracy_per_gpu(phase_train):
                                                          train_image_batch, train_label_batch),
                                                      lambda: (val_image_batch, val_label_batch))
 
-    print(train_image_batch.get_shape())
-    print(image_batch.get_shape())
     # model outputs
     logits = m.residual_net(
         image_batch, FLAGS.residual_net_n, 10, phase_train)

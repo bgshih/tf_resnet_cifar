@@ -11,6 +11,9 @@ import model_utils as mu
 
 FLAGS = tf.app.flags.FLAGS
 
+# TODO collections redundancy
+add_to_collection = True
+
 
 # TODO set on gpu
 def one_hot_embedding(label, n_classes):
@@ -35,15 +38,18 @@ def _variable_on_cpu(name, shape, initializer, trainable=True):
     return var
 
 
+# TODO collection redundancy
 def conv2d(x, n_in, n_out, k, s, p='SAME', bias=False, scope='conv'):
     with tf.variable_scope(scope):
         kernel = _variable_on_cpu('weight', [k, k, n_in, n_out],
                                   tf.truncated_normal_initializer(stddev=math.sqrt(2 / (k * k * n_out))))
-        tf.add_to_collection('weights', kernel)
+        if add_to_collection == True:
+            tf.add_to_collection('weights', kernel)
         conv = tf.nn.conv2d(x, kernel, [1, s, s, 1], padding=p)
         if bias:
-            bias = _variable_on_cpu('bias', [n_out], tf.zeros([n_out]))
-            tf.add_to_collection('biases', bias)
+            bias = _variable_on_cpu('bias', [n_out], tf.constant_initializer(0.0))
+            if add_to_collection == True:
+                tf.add_to_collection('biases', bias)
             conv = tf.nn.bias_add(conv, bias)
     return conv
 
@@ -63,8 +69,9 @@ def batch_norm(x, n_out, phase_train, scope='bn', affine=True):
     with tf.variable_scope(scope):
         beta = _variable_on_cpu('beta', [n_out], tf.constant_initializer(0.0))
         gamma = _variable_on_cpu('gamma', [n_out], tf.constant_initializer(0.0), affine)
-        tf.add_to_collection('biases', beta)
-        tf.add_to_collection('weights', gamma)
+        if add_to_collection == True:
+            tf.add_to_collection('biases', beta)
+            tf.add_to_collection('weights', gamma)
 
         batch_mean, batch_var = tf.nn.moments(x, [0,1,2], name='moments')
         ema = tf.train.ExponentialMovingAverage(decay=0.999)
