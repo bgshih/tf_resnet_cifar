@@ -31,8 +31,7 @@ tf.app.flags.DEFINE_integer(
 tf.app.flags.DEFINE_string(
     'log_dir', '../logs_cifar10/log_%s' % time.strftime("%Y%m%d_%H%M%S"), '')
 tf.app.flags.DEFINE_integer('save_interval', 5000, '')
-#  tf.app.flags.DEFINE_integer('num_gpu', 2, '')
-tf.app.flags.DEFINE_integer('num_gpu', 1, '')
+tf.app.flags.DEFINE_integer('num_gpu', 2, '')
 
 
 def train_and_eval():
@@ -104,7 +103,8 @@ def train_and_eval():
 
             # start session
             sess = tf.Session(config=tf.ConfigProto(
-                log_device_placement=False))
+                log_device_placement=False,
+                allow_soft_placement=True))
 
             # summary
             summary_op = tf.merge_all_summaries()
