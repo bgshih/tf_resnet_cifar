@@ -11,11 +11,10 @@ import model_utils as mu
 
 FLAGS = tf.app.flags.FLAGS
 
-# TODO collections redundancy
+# avoid collections redundancy
 add_to_collection = True
 
 
-# TODO set on gpu
 def one_hot_embedding(label, n_classes):
     """
     One-hot embedding
@@ -38,7 +37,6 @@ def _variable_on_cpu(name, shape, initializer, trainable=True):
     return var
 
 
-# TODO collection redundancy
 def conv2d(x, n_in, n_out, k, s, p='SAME', bias=False, scope='conv'):
     with tf.variable_scope(scope):
         kernel = _variable_on_cpu('weight', [k, k, n_in, n_out],
@@ -51,6 +49,9 @@ def conv2d(x, n_in, n_out, k, s, p='SAME', bias=False, scope='conv'):
             if add_to_collection == True:
                 tf.add_to_collection('biases', bias)
             conv = tf.nn.bias_add(conv, bias)
+
+        tf.scalar_summary(conv.name + 'conv_max', tf.reduce_max(conv))
+        tf.scalar_summary(conv.name + 'conv_sparse', tf.nn.zero_fraction(conv))
     return conv
 
 
@@ -68,7 +69,7 @@ def batch_norm(x, n_out, phase_train, scope='bn', affine=True):
     """
     with tf.variable_scope(scope):
         beta = _variable_on_cpu('beta', [n_out], tf.constant_initializer(0.0))
-        gamma = _variable_on_cpu('gamma', [n_out], tf.constant_initializer(0.0), affine)
+        gamma = _variable_on_cpu('gamma', [n_out], tf.constant_initializer(1.0), affine)
         if add_to_collection == True:
             tf.add_to_collection('biases', beta)
             tf.add_to_collection('weights', gamma)
@@ -147,6 +148,7 @@ def loss(logits, labels, scope='loss'):
                             for o in tf.get_collection('weights')]
         weight_decay_loss = tf.mul(FLAGS.weight_decay, tf.add_n(weight_l2_losses),
                                    name='weight_decay_loss')
+        # BUG this add the entropy_loss to the collection twice
         tf.add_to_collection('losses', weight_decay_loss)
 
         # total loss
@@ -176,6 +178,11 @@ def train_op(loss, global_step, learning_rate):
     gradients = tf.gradients(loss, params, name='gradients')
     gradient_weights = gradients[:len(weights)]
     gradient_biases = gradients[len(weights):]
+
+    # summary for gradient norm
+    for param, grad in zip(params, gradients):
+        norm = tf.global_norm([grad])
+        tf.scalar_summary(param.name + '_grad_norm', norm)
 
     optim_weights = tf.train.MomentumOptimizer(learning_rate_weights, 0.9)
     optim_biases = tf.train.MomentumOptimizer(learning_rate_biases, 0.9)
