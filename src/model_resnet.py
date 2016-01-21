@@ -50,8 +50,8 @@ def conv2d(x, n_in, n_out, k, s, p='SAME', bias=False, scope='conv'):
                 tf.add_to_collection('biases', bias)
             conv = tf.nn.bias_add(conv, bias)
 
-        tf.scalar_summary(conv.name + 'conv_max', tf.reduce_max(conv))
-        tf.scalar_summary(conv.name + 'conv_sparse', tf.nn.zero_fraction(conv))
+        tf.scalar_summary('conv_max/' + conv.op.name, tf.reduce_max(conv))
+        tf.scalar_summary('conv_sparse/' + conv.op.name, tf.nn.zero_fraction(conv))
     return conv
 
 
@@ -148,15 +148,16 @@ def loss(logits, labels, scope='loss'):
                             for o in tf.get_collection('weights')]
         weight_decay_loss = tf.mul(FLAGS.weight_decay, tf.add_n(weight_l2_losses),
                                    name='weight_decay_loss')
-        # BUG this add the entropy_loss to the collection twice
         tf.add_to_collection('losses', weight_decay_loss)
 
-        # total loss
-        total_loss = tf.add_n(tf.get_collection('losses'), name='total_loss')
+        # total_loss for this gpu
+        total_loss = tf.add_n(tf.get_collection('losses', scope), name='total_loss')
+    return total_loss
 
+
+def summary_losses():
     for var in tf.get_collection('losses'):
         tf.scalar_summary('losses/' + var.op.name, var)
-    return total_loss
 
 
 def accuracy(logits, gt_label, scope='accuracy'):
@@ -180,9 +181,9 @@ def train_op(loss, global_step, learning_rate):
     gradient_biases = gradients[len(weights):]
 
     # summary for gradient norm
-    for param, grad in zip(params, gradients):
+    for var, grad in zip(params, gradients):
         norm = tf.global_norm([grad])
-        tf.scalar_summary(param.name + '_grad_norm', norm)
+        tf.scalar_summary('grad_norm/' + var.op.name, norm)
 
     optim_weights = tf.train.MomentumOptimizer(learning_rate_weights, 0.9)
     optim_biases = tf.train.MomentumOptimizer(learning_rate_biases, 0.9)

@@ -78,6 +78,8 @@ def train_and_eval():
                     params = weights + biases
                     gradients = tf.gradients(loss, params, name='gradients')
                     gpu_grads.append(gradients)
+        # add summary for all the losses
+        m.summary_losses()
 
         with tf.device('/cpu:0'):
             # set up train_op

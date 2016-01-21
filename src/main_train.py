@@ -58,6 +58,7 @@ def train_and_val():
 
         # total loss
         loss = m.loss(logits, label_batch)
+        m.add_up_loss()
         accuracy = m.accuracy(logits, label_batch)
         tf.scalar_summary('train_loss', loss)
         tf.scalar_summary('train_accuracy', accuracy)
