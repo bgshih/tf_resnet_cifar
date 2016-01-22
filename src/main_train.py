@@ -16,7 +16,7 @@ import model_resnet as m
 
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string('load_dir', '', '')
-tf.app.flags.DEFINE_integer('residual_net_n', 5, '')
+tf.app.flags.DEFINE_integer('residual_net_n', 7, '')
 tf.app.flags.DEFINE_string('train_tf_path', '../data/cifar10/train.tf', '')
 tf.app.flags.DEFINE_string('val_tf_path', '../data/cifar10/test.tf', '')
 tf.app.flags.DEFINE_integer('train_batch_size', 128, '')
@@ -57,8 +57,9 @@ def train_and_val():
             image_batch, FLAGS.residual_net_n, 10, phase_train)
 
         # total loss
-        loss = m.loss(logits, label_batch)
-        m.add_up_loss()
+        m.loss(logits, label_batch)
+        loss = tf.add_n(tf.get_collection('losses'), name='total_loss')
+        m.summary_losses()
         accuracy = m.accuracy(logits, label_batch)
         tf.scalar_summary('train_loss', loss)
         tf.scalar_summary('train_accuracy', accuracy)

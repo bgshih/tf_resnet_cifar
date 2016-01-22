@@ -150,10 +150,6 @@ def loss(logits, labels, scope='loss'):
                                    name='weight_decay_loss')
         tf.add_to_collection('losses', weight_decay_loss)
 
-        # total_loss for this gpu
-        total_loss = tf.add_n(tf.get_collection('losses', scope), name='total_loss')
-    return total_loss
-
 
 def summary_losses():
     for var in tf.get_collection('losses'):

@@ -17,7 +17,7 @@ import model_utils
 
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string('load_dir', '', '')
-tf.app.flags.DEFINE_integer('residual_net_n', 5, '')
+tf.app.flags.DEFINE_integer('residual_net_n', 7, '')
 tf.app.flags.DEFINE_string(
     'train_tf_path', '../data/cifar10/train.tf', '')
 tf.app.flags.DEFINE_string(
@@ -26,13 +26,13 @@ tf.app.flags.DEFINE_integer('train_batch_size', 128, '')
 tf.app.flags.DEFINE_integer('val_batch_size', 100, '')
 tf.app.flags.DEFINE_float('weight_decay', 1e-4, 'Weight decay')
 tf.app.flags.DEFINE_integer('summary_interval', 100, 'Interval for summary.')
-tf.app.flags.DEFINE_integer('val_interval', 1000, 'Interval for evaluation.')
+tf.app.flags.DEFINE_integer('val_interval', 500, 'Interval for evaluation.')
 tf.app.flags.DEFINE_integer(
     'max_steps', 64000, 'Maximum number of iterations.')
 tf.app.flags.DEFINE_string(
     'log_dir', '../logs_cifar10/log_%s' % time.strftime("%Y%m%d_%H%M%S"), '')
 tf.app.flags.DEFINE_integer('save_interval', 5000, '')
-tf.app.flags.DEFINE_integer('num_gpu', 1, '')
+tf.app.flags.DEFINE_integer('num_gpu', 2, '')
 
 
 def train_and_eval():
@@ -61,12 +61,16 @@ def train_and_eval():
         for i in xrange(FLAGS.num_gpu):
             print('Initialize the {0}th gpu'.format(i))
             with tf.device('/gpu:{0}'.format(i)):
-                with tf.name_scope('gpu_{0}'.format(i)):
+                with tf.name_scope('gpu_{0}'.format(i)) as scope:
                     if i > 0:
                         m.add_to_collection = False
 
+                    # only one gpu's is used
+                    # only one gpu's info is printed out, but all summaried
+                    # multigpu is actived by the train_op (because of the average_gradients as a sync barrier)
+                    # when test, only one gpu is used
                     loss, accuracy, logits = loss_and_accuracy_per_gpu(
-                        phase_train)
+                        phase_train, scope)
 
                     # Reuse variables
                     tf.get_variable_scope().reuse_variables()
@@ -78,7 +82,7 @@ def train_and_eval():
                     params = weights + biases
                     gradients = tf.gradients(loss, params, name='gradients')
                     gpu_grads.append(gradients)
-        # add summary for all the losses
+        # add summary for all the entropy_losses and weight_l2_loss
         m.summary_losses()
 
         with tf.device('/cpu:0'):
@@ -119,7 +123,8 @@ def train_and_eval():
         tf.train.start_queue_runners(sess=sess)
         curr_lr = 0.0
         lr_scale = 1.0
-        for step in xrange(FLAGS.max_steps):
+        # NOTE: the interval should be the multiple of the num_gpu
+        for step in xrange(0, FLAGS.max_steps, FLAGS.num_gpu):
             # set learning rate manually
             if step <= 32000:
                 _lr = lr_scale * 1e-1
@@ -159,7 +164,7 @@ def train_and_eval():
                     val_losses.append(session_outputs[1])
                 val_accuracy = float(np.mean(np.asarray(val_accuracies)))
                 val_loss = float(np.mean(np.asarray(val_losses)))
-                print('Test accuracy = %f' % val_accuracy)
+                print('Test accuracy = %f' % val_accuracy, 'Test loss = %f' % val_loss)
                 val_summary = tf.Summary()
                 val_summary.value.add(tag='val_accuracy',
                                       simple_value=val_accuracy)
@@ -188,7 +193,7 @@ def average_gradients(gpu_grads):
     return averaged_grads
 
 
-def loss_and_accuracy_per_gpu(phase_train):
+def loss_and_accuracy_per_gpu(phase_train, scope='gpu_i'):
     # train/test inputs
     train_image_batch, train_label_batch = m.make_train_batch(
         FLAGS.train_tf_path, FLAGS.train_batch_size)
@@ -204,13 +209,13 @@ def loss_and_accuracy_per_gpu(phase_train):
         image_batch, FLAGS.residual_net_n, 10, phase_train)
 
     # total loss
-    loss = m.loss(logits, label_batch)
+    m.loss(logits, label_batch)
+    loss = tf.add_n(tf.get_collection('losses', scope), name='total_loss')
     accuracy = m.accuracy(logits, label_batch)
-    tf.scalar_summary('train_loss', loss)
-    tf.scalar_summary('train_accuracy', accuracy)
+    tf.scalar_summary('train_loss/' + scope, loss)
+    tf.scalar_summary('train_accuracy/' + scope, accuracy)
 
     return loss, accuracy, logits
 
 if __name__ == '__main__':
-    pass
     train_and_eval()
