@@ -29,6 +29,7 @@ tf.app.flags.DEFINE_integer(
 tf.app.flags.DEFINE_string(
     'log_dir', '../logs_cifar10/log_%s' % time.strftime("%Y%m%d_%H%M%S"), '')
 tf.app.flags.DEFINE_integer('save_interval', 5000, '')
+tf.app.flags.DEFINE_string('restore_path', '/home/jrmei/research/tf_resnet_cifar/logs_cifar10/log_20160121_235623/checkpoint-60000', 'the checkpoint to be restored')
 
 
 def train_and_val():
@@ -80,10 +81,15 @@ def train_and_val():
         for var in tf.trainable_variables():
             tf.histogram_summary('params/' + var.op.name, var)
 
-        # initialization (TODO: or load)
-        init_op = tf.initialize_all_variables()
-        print('Initializing...')
-        sess.run(init_op, {phase_train.name: True})
+        if FLAGS.restore_path is None:
+            # initialization
+            print('Initializing...')
+            init_op = tf.initialize_all_variables()
+            sess.run(init_op, {phase_train.name: True})
+        else:
+            # restore from previous checkpoint
+            print('Restore variable from %s' % FLAGS.restore_path)
+            saver.restore(sess, FLAGS.restore_path)
 
         # train loop
         tf.train.start_queue_runners(sess=sess)
