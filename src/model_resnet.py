@@ -67,24 +67,28 @@ def batch_norm(x, n_out, phase_train, scope='bn', affine=True):
     Return:
         normed: batch-normalized maps
     """
-    with tf.variable_scope(scope):
+    with tf.variable_scope(scope) as scope:
         beta = _variable_on_cpu('beta', [n_out], tf.constant_initializer(0.0))
-        gamma = _variable_on_cpu('gamma', [n_out], tf.constant_initializer(1.0), affine)
+        gamma = _variable_on_cpu(
+            'gamma', [n_out], tf.constant_initializer(1.0), affine)
         if add_to_collection == True:
             tf.add_to_collection('biases', beta)
             tf.add_to_collection('weights', gamma)
 
-        batch_mean, batch_var = tf.nn.moments(x, [0,1,2], name='moments')
-        ema = tf.train.ExponentialMovingAverage(decay=0.999)
-        ema_apply_op = ema.apply([batch_mean, batch_var])
-        ema_mean, ema_var = ema.average(batch_mean), ema.average(batch_var)
+        batch_mean, batch_var = tf.nn.moments(x, [0, 1, 2], name='moments')
+        sma = SMA.SimpleMovingAverage()
+        sma_apply_op = sma.apply([batch_mean, batch_var])
+        sma_mean, sma_var = sma.average(batch_mean), sma.average(batch_var)
+        if add_to_collection == True:
+            tf.add_to_collection('means', sma_mean)
+            tf.add_to_collection('vars', sma_var)
 
         def mean_var_with_update():
-            with tf.control_dependencies([ema_apply_op]):
+            with tf.control_dependencies([sma_apply_op]):
                 return tf.identity(batch_mean), tf.identity(batch_var)
         mean, var = control_flow_ops.cond(phase_train,
                                           mean_var_with_update,
-                                          lambda: (ema_mean, ema_var))
+                                          lambda: (sma_mean, sma_var))
 
         normed = tf.nn.batch_norm_with_global_normalization(x, mean, var,
                                                             beta, gamma, 1e-3, affine)
