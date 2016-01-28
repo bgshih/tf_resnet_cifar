@@ -7,7 +7,7 @@ from tensorflow.python import control_flow_ops
 import numpy as np
 
 import model_utils as mu
-
+import simple_moving_averages as SMA
 
 FLAGS = tf.app.flags.FLAGS
 

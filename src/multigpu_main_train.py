@@ -154,28 +154,6 @@ def train_and_eval():
                       (datetime.now(), step, train_loss_value, train_acc_value))
                 summary_writer.add_summary(summary_str, step)
 
-            if step > 0 and step % FLAGS.val_interval == 0:
-                print('Evaluating...')
-                n_val_samples = 10000
-                val_batch_size = FLAGS.val_batch_size
-                n_val_batch = int(n_val_samples / val_batch_size)
-                val_losses = []
-                val_accuracies = []
-                for i in xrange(n_val_batch):
-                    fetches = [accuracy, loss]
-                    session_outputs = sess.run(
-                        fetches, {phase_train.name: False})
-                    val_accuracies.append(session_outputs[0])
-                    val_losses.append(session_outputs[1])
-                val_accuracy = float(np.mean(np.asarray(val_accuracies)))
-                val_loss = float(np.mean(np.asarray(val_losses)))
-                print('Test accuracy = %f' % val_accuracy, 'Test loss = %f' % val_loss)
-                val_summary = tf.Summary()
-                val_summary.value.add(tag='val_accuracy',
-                                      simple_value=val_accuracy)
-                val_summary.value.add(tag='val_loss', simple_value=val_loss)
-                summary_writer.add_summary(val_summary, step)
-
             if step > 0 and step % FLAGS.save_interval == 0:
                 checkpoint_path = os.path.join(FLAGS.log_dir, 'checkpoint')
                 saver.save(sess, checkpoint_path, global_step=step)
