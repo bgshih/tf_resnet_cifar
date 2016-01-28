@@ -13,9 +13,9 @@ import model_resnet as m
 
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string('load_dir', '', '')
-tf.app.flags.DEFINE_integer('residual_net_n', 5, '')
-tf.app.flags.DEFINE_string('train_tf_path', '../data/cifar10/train_cstnorm.tf', '')
-tf.app.flags.DEFINE_string('val_tf_path', '../data/cifar10/test_cstnorm.tf', '')
+tf.app.flags.DEFINE_integer('residual_net_n', 18, '')
+tf.app.flags.DEFINE_string('train_tf_path', '../data/cifar10/train_simple_norm.tf', '')
+tf.app.flags.DEFINE_string('val_tf_path', '../data/cifar10/test_simple_norm.tf', '')
 tf.app.flags.DEFINE_integer('train_batch_size', 128, '')
 tf.app.flags.DEFINE_integer('val_batch_size', 100, '')
 tf.app.flags.DEFINE_float('weight_decay', 1e-4, 'Weight decay')
@@ -76,15 +76,16 @@ def train_and_val():
         # train loop
         tf.train.start_queue_runners(sess=sess)
         curr_lr = 0.0
-        lr_scale = 1.0
         for step in xrange(FLAGS.max_steps):
             # set learning rate manually
-            if step <= 32000:
-                _lr = lr_scale * 1e-1
+            if step <= 2000:
+                _lr = 1e-2
+            elif step <= 32000:
+                _lr = 1e-1
             elif step <= 48000:
-                _lr = lr_scale * 1e-2
+                _lr = 1e-2
             else:
-                _lr = lr_scale * 1e-3
+                _lr = 1e-3
             if curr_lr != _lr:
                 curr_lr = _lr
                 print('Learning rate set to %f' % curr_lr)

@@ -32,7 +32,7 @@ def conv2d(x, n_in, n_out, k, s, p='SAME', bias=False, scope='conv'):
     with tf.variable_scope(scope):
         kernel = tf.Variable(
             tf.truncated_normal([k, k, n_in, n_out],
-                stddev=math.sqrt(2/(k*k*n_out))),
+                stddev=math.sqrt(2/(k*k*n_in))),
             name='weight')
         tf.add_to_collection('weights', kernel)
         conv = tf.nn.conv2d(x, kernel, [1,s,s,1], padding=p)
@@ -64,7 +64,7 @@ def batch_norm(x, n_out, phase_train, scope='bn', affine=True):
         tf.add_to_collection('weights', gamma)
 
         batch_mean, batch_var = tf.nn.moments(x, [0,1,2], name='moments')
-        ema = tf.train.ExponentialMovingAverage(decay=0.999)
+        ema = tf.train.ExponentialMovingAverage(decay=0.99)
         ema_apply_op = ema.apply([batch_mean, batch_var])
         ema_mean, ema_var = ema.average(batch_mean), ema.average(batch_var)
         def mean_var_with_update():
@@ -90,8 +90,8 @@ def residual_block(x, n_in, n_out, subsample, phase_train, scope='res_block'):
         y = batch_norm(y, n_out, phase_train, scope='bn_1')
         y = tf.nn.relu(y, name='relu_1')
         y = conv2d(y, n_out, n_out, 3, 1, 'SAME', True, scope='conv_2')
-        y = y + shortcut
         y = batch_norm(y, n_out, phase_train, scope='bn_2')
+        y = y + shortcut
         y = tf.nn.relu(y, name='relu_2')
     return y
 

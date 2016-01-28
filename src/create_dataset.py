@@ -32,41 +32,32 @@ def create_dataset():
                 }))
             writer.write(example.SerializeToString())
 
-    # data_root = '/home/bgshi/research/datasets/cifar-10-batches-py'
-    # train_images = np.zeros((50000,3072), dtype=np.float32)
-    # trian_labels = np.zeros((50000,), dtype=np.int32)
-    # for i in xrange(5):
-    #     data_batch = joblib.load(os.path.join(data_root, 'data_batch_%d' % (i+1)))
-    #     train_images[10000*i:10000*(i+1)] = data_batch['data'].astype(np.float32)
-    #     trian_labels[10000*i:10000*(i+1)] = np.asarray(data_batch['labels'], dtype=np.int32)
-    # train_images = np.reshape(train_images, [50000,3,32,32])
-    # train_images = np.transpose(train_images, axes=[0,2,3,1])
-    # images_mean = np.mean(train_images, axis=0)
-    # train_images -= images_mean
-    # train_images /= 256.0
-    # train_set = {'images': train_images, 'labels': trian_labels}
-    # save_to_records('../data/cifar10/train.tf', train_images, trian_labels)
+    data_root = '/home/bgshi/research/datasets/cifar-10-batches-py'
+    train_images = np.zeros((50000,3072), dtype=np.float32)
+    trian_labels = np.zeros((50000,), dtype=np.int32)
+    for i in xrange(5):
+        data_batch = joblib.load(os.path.join(data_root, 'data_batch_%d' % (i+1)))
+        train_images[10000*i:10000*(i+1)] = data_batch['data'].astype(np.float32)
+        trian_labels[10000*i:10000*(i+1)] = np.asarray(data_batch['labels'], dtype=np.int32)
+    train_images = np.reshape(train_images, [50000,3,32,32])
+    train_images = np.transpose(train_images, axes=[0,2,3,1])
+    images_mean = np.mean(train_images, axis=0)
+    data_std = np.std(train_images)
+    train_images -= images_mean
+    train_images /= data_std
+    train_set = {'images': train_images, 'labels': trian_labels}
+    save_to_records('../data/cifar10/train_simple_norm.tf', train_images, trian_labels)
 
-    # data_batch = joblib.load(os.path.join(data_root, 'test_batch'))
-    # test_images = data_batch['data'].astype(np.float32)
-    # test_images = np.reshape(test_images, [10000,3,32,32])
-    # test_images = np.transpose(test_images, axes=[0,2,3,1])
-    # test_images -= images_mean
-    # test_images /= 256.0
-    # test_labels = np.asarray(data_batch['labels'], dtype=np.int32)
-    # test_set = {'images': test_images, 'labels': test_labels}
-    # save_to_records('../data/cifar10/test.tf', test_images, test_labels)
-
-    train_images = loadmat('../data/train_data.mat')['x']
-    train_images = np.ascontiguousarray(np.transpose(train_images, axes=[0,2,3,1]))
-    train_labels = loadmat('../data/train_label.mat')['x'].astype(np.int64) - 1
-    test_images = loadmat('../data/test_data.mat')['x']
-    test_images = np.ascontiguousarray(np.transpose(test_images, axes=[0,2,3,1]))
-    test_labels = loadmat('../data/test_label.mat')['x'].astype(np.int64) - 1
-
-    save_to_records('../data/cifar10/train_cstnorm.tf', train_images, train_labels)
-    save_to_records('../data/cifar10/test_cstnorm.tf', test_images, test_labels)
-
+    data_batch = joblib.load(os.path.join(data_root, 'test_batch'))
+    test_images = data_batch['data'].astype(np.float32)
+    test_images = np.reshape(test_images, [10000,3,32,32])
+    test_images = np.transpose(test_images, axes=[0,2,3,1])
+    test_images -= images_mean
+    test_images /= data_std
+    test_labels = np.asarray(data_batch['labels'], dtype=np.int32)
+    test_set = {'images': test_images, 'labels': test_labels}
+    save_to_records('../data/cifar10/test_simple_norm.tf', test_images, test_labels)
+    
 
 if __name__ == '__main__':
     create_dataset()
