@@ -78,7 +78,7 @@ def train_and_val():
         curr_lr = 0.0
         for step in xrange(FLAGS.max_steps):
             # set learning rate manually
-            if step <= 2000:
+            if step <= 5000:
                 _lr = 1e-2
             elif step <= 32000:
                 _lr = 1e-1
