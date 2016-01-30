@@ -175,10 +175,14 @@ def cifar10_input_stream(records_path):
     reader = tf.TFRecordReader()
     filename_queue = tf.train.string_input_producer([records_path], None)
     _, record_value = reader.read(filename_queue)
-    features = tf.parse_single_example(
-        record_value,
-        dense_keys=['image_raw', 'label'],
-        dense_types=[tf.string, tf.int64])
+    # features = tf.parse_single_example(record_value,
+    #     {
+    #         'image_raw': tf.FixedLenFeature([], tf.string),
+    #         'label': tf.FixedLenFeature([], tf.int64),
+    #     })
+    features = tf.parse_single_example(record_value,
+        dense_keys = ['image_raw', 'label'],
+        dense_types = [tf.string, tf.int64])
     image = tf.decode_raw(features['image_raw'], tf.float32)
     image = tf.reshape(image, [32,32,3])
     label = tf.cast(features['label'], tf.int64)

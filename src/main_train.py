@@ -60,7 +60,7 @@ def train_and_val():
         saver = tf.train.Saver(tf.all_variables())
 
         # start session
-        sess = tf.Session(config=tf.ConfigProto(log_device_placement=False))
+        sess = tf.Session(config=tf.ConfigProto(log_device_placement=True))
 
         # summary
         summary_op = tf.merge_all_summaries()
@@ -69,9 +69,18 @@ def train_and_val():
             tf.histogram_summary('params/' + var.op.name, var)
 
         # initialization (TODO: or load)
-        init_op = tf.initialize_all_variables()
-        print('Initializing...')
-        sess.run(init_op, {phase_train.name: True})
+        if FLAGS.load_dir != '':
+            checkpoint = tf.train.get_checkpoint_state(FLAGS.load_dir)
+            model_checkpoint_path = checkpoint.model_checkpoint_path
+            if checkpoint and model_checkpoint_path:
+                saver.restore(sess, model_checkpoint_path)
+                print('Model restored from %s' % model_checkpoint_path)
+            else:
+                raise 'Load directory provided by no checkpoint found'
+        else:
+            init_op = tf.initialize_all_variables()
+            print('Initializing...')
+            sess.run(init_op, {phase_train.name: True})
 
         # train loop
         tf.train.start_queue_runners(sess=sess)
