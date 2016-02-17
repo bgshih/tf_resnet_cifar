@@ -1,6 +1,9 @@
 from __future__ import division
 
-import sys, os, time, math
+import sys
+import os
+import time
+import math
 import ipdb
 from datetime import datetime
 import numpy as np
@@ -38,8 +41,10 @@ def train_and_val():
         global_step = tf.Variable(0, trainable=False, name='global_step')
 
         # train/test inputs
-        train_image_batch, train_label_batch = m.make_train_batch(FLAGS.train_tf_path, FLAGS.train_batch_size)
-        val_image_batch, val_label_batch = m.make_validation_batch(FLAGS.val_tf_path, FLAGS.val_batch_size)
+        train_image_batch, train_label_batch = m.make_train_batch(
+            FLAGS.train_tf_path, FLAGS.train_batch_size)
+        val_image_batch, val_label_batch = m.make_validation_batch(
+            FLAGS.val_tf_path, FLAGS.val_batch_size)
         image_batch, label_batch = control_flow_ops.cond(phase_train,
             lambda: (train_image_batch, train_label_batch),
             lambda: (val_image_batch, val_label_batch))
@@ -48,7 +53,9 @@ def train_and_val():
         logits = m.residual_net(image_batch, FLAGS.residual_net_n, 10, phase_train)
 
         # total loss
-        loss = m.loss(logits, label_batch)
+        m.loss(logits, label_batch)
+        loss = tf.add_n(tf.get_collection('losses'), name='total_loss')
+        m.summary_losses()
         accuracy = m.accuracy(logits, label_batch)
         tf.scalar_summary('train_loss', loss)
         tf.scalar_summary('train_accuracy', accuracy)
@@ -64,12 +71,14 @@ def train_and_val():
 
         # summary
         summary_op = tf.merge_all_summaries()
-        summary_writer = tf.train.SummaryWriter(FLAGS.log_dir, graph_def=sess.graph_def)
+        summary_writer = tf.train.SummaryWriter(
+            FLAGS.log_dir, graph_def=sess.graph_def)
         for var in tf.trainable_variables():
             tf.histogram_summary('params/' + var.op.name, var)
 
         # initialization (TODO: or load)
         if FLAGS.load_dir != '':
+            # load from checkpoint
             checkpoint = tf.train.get_checkpoint_state(FLAGS.load_dir)
             model_checkpoint_path = checkpoint.model_checkpoint_path
             if checkpoint and model_checkpoint_path:
@@ -78,6 +87,7 @@ def train_and_val():
             else:
                 raise 'Load directory provided by no checkpoint found'
         else:
+            # train from scratch
             init_op = tf.initialize_all_variables()
             print('Initializing...')
             sess.run(init_op, {phase_train.name: True})
@@ -102,12 +112,14 @@ def train_and_val():
             fetches = [train_op, loss]
             if step % FLAGS.summary_interval == 0:
                 fetches += [accuracy, summary_op]
-            sess_outputs = sess.run(fetches, {phase_train.name: True, learning_rate.name: curr_lr})
+            sess_outputs = sess.run(
+                fetches, {phase_train.name: True, learning_rate.name: curr_lr})
 
             if step % FLAGS.summary_interval == 0:
-                train_loss_value, train_acc_value, summary_str = sess_outputs[1:]
+                train_loss_value, train_acc_value, summary_str = sess_outputs[
+                    1:]
                 print('[%s] Iteration %d, train loss = %f, train accuracy = %f' %
-                    (datetime.now(), step, train_loss_value, train_acc_value))
+                      (datetime.now(), step, train_loss_value, train_acc_value))
                 summary_writer.add_summary(summary_str, step)
 
             if step > 0 and step % FLAGS.val_interval == 0:
@@ -120,12 +132,16 @@ def train_and_val():
                 val_losses = []
                 for i in xrange(n_val_batch):
                     fetches = [logits, label_batch, loss]
-                    session_outputs = sess.run(fetches, {phase_train.name: False})
-                    val_logits[i*val_batch_size:(i+1)*val_batch_size,:] = session_outputs[0]
-                    val_labels[i*val_batch_size:(i+1)*val_batch_size] = session_outputs[1]
+                    session_outputs = sess.run(
+                        fetches, {phase_train.name: False})
+                    val_logits[
+                        i * val_batch_size:(i + 1) * val_batch_size, :] = session_outputs[0]
+                    val_labels[
+                        i * val_batch_size:(i + 1) * val_batch_size] = session_outputs[1]
                     val_losses.append(session_outputs[2])
                 pred_labels = np.argmax(val_logits, axis=1)
-                val_accuracy = np.count_nonzero(pred_labels == val_labels) / n_val_samples
+                val_accuracy = np.count_nonzero(
+                    pred_labels == val_labels) / n_val_samples
                 val_loss = float(np.mean(np.asarray(val_losses)))
                 print('Test accuracy = %f' % val_accuracy)
                 val_summary = tf.Summary()
