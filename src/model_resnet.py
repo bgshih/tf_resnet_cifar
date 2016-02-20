@@ -37,7 +37,7 @@ def conv2d(x, n_in, n_out, k, s, p='SAME', bias=False, scope='conv'):
         tf.add_to_collection('weights', kernel)
         conv = tf.nn.conv2d(x, kernel, [1,s,s,1], padding=p)
         if bias:
-            bias = tf.get_variable('bias', [n_out], tf.constant_initializer(0.0))
+            bias = tf.get_variable('bias', [n_out], initializer=tf.constant_initializer(0.0))
             tf.add_to_collection('biases', bias)
             conv = tf.nn.bias_add(conv, bias)
     return conv
@@ -69,11 +69,11 @@ def batch_norm(x, n_out, phase_train, scope='bn', affine=True):
         ema_mean, ema_var = ema.average(batch_mean), ema.average(batch_var)
 
         def mean_var_with_update():
-            with tf.control_dependencies([sma_apply_op]):
+            with tf.control_dependencies([ema_apply_op]):
                 return tf.identity(batch_mean), tf.identity(batch_var)
         mean, var = control_flow_ops.cond(phase_train,
                                           mean_var_with_update,
-                                          lambda: (sma_mean, sma_var))
+                                          lambda: (ema_mean, ema_var))
 
         normed = tf.nn.batch_norm_with_global_normalization(x, mean, var,
                                                             beta, gamma, 1e-3, affine)
@@ -155,29 +155,38 @@ def accuracy(logits, gt_label, scope='accuracy'):
 
 def train_op(loss, global_step, learning_rate):
     tf.scalar_summary('learning_rate', learning_rate)
-    learning_rate_weights = learning_rate
-    learning_rate_biases = 2.0 * learning_rate  # double learning rate for biases
 
-    weights, biases = tf.get_collection('weights'), tf.get_collection('biases')
-    assert(len(weights) + len(biases) == len(tf.trainable_variables()))
-    params = weights + biases
+    # learning_rate_weights = learning_rate
+    # learning_rate_biases = 2.0 * learning_rate  # double learning rate for biases
+
+    # weights, biases = tf.get_collection('weights'), tf.get_collection('biases')
+    # assert(len(weights) + len(biases) == len(tf.trainable_variables()))
+    # params = weights + biases
+    # gradients = tf.gradients(loss, params, name='gradients')
+    # gradient_weights = gradients[:len(weights)]
+    # gradient_biases = gradients[len(weights):]
+
+    # # summary for gradient norm
+    # for var, grad in zip(params, gradients):
+    #     norm = tf.global_norm([grad])
+    #     tf.scalar_summary('grad_norm/' + var.op.name, norm)
+
+    # optim_weights = tf.train.MomentumOptimizer(learning_rate_weights, 0.9)
+    # optim_biases = tf.train.MomentumOptimizer(learning_rate_biases, 0.9)
+    # update_weights = optim_weights.apply_gradients(
+    #     zip(gradient_weights, weights))
+    # update_biases = optim_biases.apply_gradients(zip(gradient_biases, biases))
+
+    # with tf.control_dependencies([update_weights, update_biases]):
+    #     train_op = tf.no_op(name='train_op')
+
+    params = tf.trainable_variables()
     gradients = tf.gradients(loss, params, name='gradients')
-    gradient_weights = gradients[:len(weights)]
-    gradient_biases = gradients[len(weights):]
-
-    # summary for gradient norm
-    for var, grad in zip(params, gradients):
-        norm = tf.global_norm([grad])
-        tf.scalar_summary('grad_norm/' + var.op.name, norm)
-
-    optim_weights = tf.train.MomentumOptimizer(learning_rate_weights, 0.9)
-    optim_biases = tf.train.MomentumOptimizer(learning_rate_biases, 0.9)
-    update_weights = optim_weights.apply_gradients(
-        zip(gradient_weights, weights))
-    update_biases = optim_biases.apply_gradients(zip(gradient_biases, biases))
-
-    with tf.control_dependencies([update_weights, update_biases]):
+    optim = tf.train.MomentumOptimizer(learning_rate, 0.9)
+    update = optim.apply_gradients(zip(gradients, params))
+    with tf.control_dependencies([update]):
         train_op = tf.no_op(name='train_op')
+
     return train_op
 
 
@@ -185,14 +194,14 @@ def cifar10_input_stream(records_path):
     reader = tf.TFRecordReader()
     filename_queue = tf.train.string_input_producer([records_path], None)
     _, record_value = reader.read(filename_queue)
-    # features = tf.parse_single_example(record_value,
-    #     {
-    #         'image_raw': tf.FixedLenFeature([], tf.string),
-    #         'label': tf.FixedLenFeature([], tf.int64),
-    #     })
     features = tf.parse_single_example(record_value,
-        dense_keys = ['image_raw', 'label'],
-        dense_types = [tf.string, tf.int64])
+        {
+            'image_raw': tf.FixedLenFeature([], tf.string),
+            'label': tf.FixedLenFeature([], tf.int64),
+        })
+    # features = tf.parse_single_example(record_value,
+    #     dense_keys = ['image_raw', 'label'],
+    #     dense_types = [tf.string, tf.int64])
     image = tf.decode_raw(features['image_raw'], tf.float32)
     image = tf.reshape(image, [32, 32, 3])
     label = tf.cast(features['label'], tf.int64)
@@ -209,7 +218,7 @@ def random_distort_image(image):
     distorted_image = image
     distorted_image = tf.image.pad_to_bounding_box(
         image, 4, 4, 40, 40)  # pad 4 pixels to each side
-    distorted_image = tf.image.random_crop(distorted_image, [32, 32])
+    distorted_image = tf.random_crop(distorted_image, [32, 32, 3])
     distorted_image = tf.image.random_flip_left_right(distorted_image)
     # distorted_image = tf.image.random_brightness(distorted_image, max_delta=63)
     # distorted_image = tf.image.random_contrast(distorted_image, lower=0.2, upper=1.8)

@@ -12,11 +12,12 @@ from tensorflow.python import control_flow_ops
 import joblib
 
 import model_resnet as m
+import model_utils as mu
 
 
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string('load_dir', '', '')
-tf.app.flags.DEFINE_integer('residual_net_n', 18, '')
+tf.app.flags.DEFINE_integer('residual_net_n', 3, '')
 tf.app.flags.DEFINE_string('train_tf_path', '../data/cifar10/train_simple_norm.tf', '')
 tf.app.flags.DEFINE_string('val_tf_path', '../data/cifar10/test_simple_norm.tf', '')
 tf.app.flags.DEFINE_integer('train_batch_size', 128, '')
@@ -67,7 +68,7 @@ def train_and_val():
         saver = tf.train.Saver(tf.all_variables())
 
         # start session
-        sess = tf.Session(config=tf.ConfigProto(log_device_placement=True))
+        sess = tf.Session(config=tf.ConfigProto(log_device_placement=False))
 
         # summary
         summary_op = tf.merge_all_summaries()
@@ -110,12 +111,12 @@ def train_and_val():
                 print('Learning rate set to %f' % curr_lr)
 
             fetches = [train_op, loss]
-            if step % FLAGS.summary_interval == 0:
+            if step > 0 and step % FLAGS.summary_interval == 0:
                 fetches += [accuracy, summary_op]
             sess_outputs = sess.run(
                 fetches, {phase_train.name: True, learning_rate.name: curr_lr})
 
-            if step % FLAGS.summary_interval == 0:
+            if step > 0 and step % FLAGS.summary_interval == 0:
                 train_loss_value, train_acc_value, summary_str = sess_outputs[
                     1:]
                 print('[%s] Iteration %d, train loss = %f, train accuracy = %f' %
@@ -153,6 +154,8 @@ def train_and_val():
                 checkpoint_path = os.path.join(FLAGS.log_dir, 'checkpoint')
                 saver.save(sess, checkpoint_path, global_step=step)
                 print('Checkpoint saved at %s' % checkpoint_path)
+
+            ipdb.set_trace()
 
 
 if __name__ == '__main__':
