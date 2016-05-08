@@ -31,14 +31,14 @@ def conv2d(x, n_in, n_out, k, s, p='SAME', bias=False, scope='conv'):
   with tf.variable_scope(scope):
     kernel = tf.Variable(
       tf.truncated_normal([k, k, n_in, n_out],
-        stddev=math.sqrt(2/(k*k*n_in))),
+        stddev=math.sqrt(2.0/(k*k*n_in))),
       name='weight')
     tf.add_to_collection('weights', kernel)
-    conv = tf.nn.conv2d(x, kernel, [1,s,s,1], padding=p)
+    conv = tf.nn.conv2d(x, kernel, [1,1,s,s], padding=p, data_format='NCHW')
     if bias:
       bias = tf.get_variable('bias', [n_out], initializer=tf.constant_initializer(0.0))
       tf.add_to_collection('biases', bias)
-      conv = tf.nn.bias_add(conv, bias)
+      conv = tf.nn.bias_add(conv, bias, data_format='NCHW')
   return conv
 
 def batch_norm(x, n_out, phase_train, scope='bn', affine=True):
@@ -54,26 +54,27 @@ def batch_norm(x, n_out, phase_train, scope='bn', affine=True):
     normed: batch-normalized maps
   """
   with tf.variable_scope(scope):
-    beta = tf.Variable(tf.constant(0.0, shape=[n_out]),
+    beta = tf.Variable(tf.constant(0.0, shape=[1,n_out,1,1]),
       name='beta', trainable=True)
-    gamma = tf.Variable(tf.constant(1.0, shape=[n_out]),
+    gamma = tf.Variable(tf.constant(1.0, shape=[1,n_out,1,1]),
       name='gamma', trainable=affine)
     tf.add_to_collection('biases', beta)
     tf.add_to_collection('weights', gamma)
-
-    batch_mean, batch_var = tf.nn.moments(x, [0,1,2], name='moments')
+    batch_mean, batch_var = tf.nn.moments(x, axes=[0,2,3],
+                                          keep_dims=True, name='moments')
+    # somehow tf.nn.moments use dynamic shape for batch_mean but not batch_var
+    batch_mean.set_shape([1,n_out,1,1])
     ema = tf.train.ExponentialMovingAverage(decay=0.99)
 
     def mean_var_with_update():
       ema_apply_op = ema.apply([batch_mean, batch_var])
       with tf.control_dependencies([ema_apply_op]):
         return tf.identity(batch_mean), tf.identity(batch_var)
+
     mean, var = control_flow_ops.cond(phase_train,
       mean_var_with_update,
       lambda: (ema.average(batch_mean), ema.average(batch_var)))
-
-    normed = tf.nn.batch_norm_with_global_normalization(x, mean, var, 
-      beta, gamma, 1e-3, affine)
+    normed = tf.nn.batch_normalization(x, mean, var, beta, gamma, 1e-3)
   return normed
 
 def residual_block(x, n_in, n_out, subsample, phase_train, scope='res_block'):
@@ -109,8 +110,8 @@ def residual_net(x, n, n_classes, phase_train, scope='res_net'):
     y = residual_group(y, 16, 32, n, True, phase_train, scope='group_2')
     y = residual_group(y, 32, 64, n, True, phase_train, scope='group_3')
     y = conv2d(y, 64, n_classes, 1, 1, 'SAME', True, scope='conv_last')
-    y = tf.nn.avg_pool(y, [1, 8, 8, 1], [1, 1, 1, 1], 'VALID', name='avg_pool')
-    y = tf.squeeze(y, squeeze_dims=[1, 2])
+    y = tf.nn.avg_pool(y, [1,1,8,8], [1,1,1,1], 'VALID', data_format='NCHW', name='avg_pool')
+    y = tf.squeeze(y, squeeze_dims=[2,3])
   return y
 
 def loss(logits, labels, scope='loss'):
@@ -182,6 +183,7 @@ def make_train_batch(train_records_path, batch_size):
       train_image, train_label = cifar10_input_stream(train_records_path)
       train_image = normalize_image(train_image)
       train_image = random_distort_image(train_image)
+      train_image = tf.transpose(train_image, [2,0,1]) # HWC -> CHW
       train_image_batch, train_label_batch = tf.train.shuffle_batch(
         [train_image, train_label], batch_size=batch_size, num_threads=4,
         capacity=50000,
@@ -189,10 +191,11 @@ def make_train_batch(train_records_path, batch_size):
   return train_image_batch, train_label_batch
 
 def make_validation_batch(test_records_path, batch_size):
-  with tf.variable_scope('evaluate_batch'):
+  with tf.variable_scope('validation_batch'):
     with tf.device('/cpu:0'):
       test_image, test_label = cifar10_input_stream(test_records_path)
       test_image = normalize_image(test_image)
+      test_image = tf.transpose(test_image, [2,0,1]) # HWC -> CHW
       test_image_batch, test_label_batch = tf.train.batch(
         [test_image, test_label], batch_size=batch_size, num_threads=1,
         capacity=10000)
