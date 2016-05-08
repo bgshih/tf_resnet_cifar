@@ -17,8 +17,8 @@ import model_utils as mu
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string('load_dir', '', '')
 tf.app.flags.DEFINE_integer('residual_net_n', 5, '')
-tf.app.flags.DEFINE_string('train_tf_path', '../data/cifar10/train_simple_norm.tf', '')
-tf.app.flags.DEFINE_string('val_tf_path', '../data/cifar10/test_simple_norm.tf', '')
+tf.app.flags.DEFINE_string('train_tf_path', '../data/cifar10/train.tf', '')
+tf.app.flags.DEFINE_string('val_tf_path', '../data/cifar10/test.tf', '')
 tf.app.flags.DEFINE_string('mean_std_path', '../data/cifar10/meanstd.pkl', '')
 tf.app.flags.DEFINE_integer('train_batch_size', 128, '')
 tf.app.flags.DEFINE_integer('val_batch_size', 100, '')
@@ -71,7 +71,7 @@ def train_and_val():
     # summary writer
     summary_op = tf.merge_all_summaries()
     summary_writer = tf.train.SummaryWriter(
-      FLAGS.log_dir, graph_def=sess.graph_def)
+      FLAGS.log_dir, graph=sess.graph)
 
     # initialize parameters or load from a checkpoint
     if FLAGS.load_dir != '':

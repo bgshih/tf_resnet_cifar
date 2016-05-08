@@ -1,1 +1,1 @@
-CUDA_VISIBLE_DEVICES=2 python main_train.py
+CUDA_VISIBLE_DEVICES=0 python main_train.py

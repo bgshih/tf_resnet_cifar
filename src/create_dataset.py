@@ -29,7 +29,7 @@ def create_dataset():
       writer.write(example.SerializeToString())
 
   # train set
-  data_root = '/var/share/datasets/image_classification/cifar-10-batches-py'
+  data_root = '/home/bgshi/research/datasets/cifar-10-batches-py'
   train_images = np.zeros((50000,3072), dtype=np.uint8)
   trian_labels = np.zeros((50000,), dtype=np.int32)
   for i in xrange(5):
@@ -43,7 +43,7 @@ def create_dataset():
   # mean and std
   image_mean = np.mean(train_images.astype(np.float32), axis=(0,1,2))
   image_std = np.std(train_images.astype(np.float32), axis=(0,1,2))
-  joblib.dump({'mean': image_mean, 'std': image_std}, '../data/cifar10/meanstd.pkl')
+  joblib.dump({'mean': image_mean, 'std': image_std}, '../data/cifar10/meanstd.pkl', compress=5)
 
   # test set
   data_batch = joblib.load(os.path.join(data_root, 'test_batch'))

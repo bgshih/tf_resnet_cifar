@@ -63,10 +63,9 @@ def batch_norm(x, n_out, phase_train, scope='bn', affine=True):
 
     batch_mean, batch_var = tf.nn.moments(x, [0,1,2], name='moments')
     ema = tf.train.ExponentialMovingAverage(decay=0.99)
-    ema_apply_op = ema.apply([batch_mean, batch_var])
-    ema_mean, ema_var = ema.average(batch_mean), ema.average(batch_var)
 
     def mean_var_with_update():
+      ema_apply_op = ema.apply([batch_mean, batch_var])
       with tf.control_dependencies([ema_apply_op]):
         return tf.identity(batch_mean), tf.identity(batch_var)
     mean, var = control_flow_ops.cond(phase_train,
@@ -76,7 +75,6 @@ def batch_norm(x, n_out, phase_train, scope='bn', affine=True):
     normed = tf.nn.batch_norm_with_global_normalization(x, mean, var, 
       beta, gamma, 1e-3, affine)
   return normed
-
 
 def residual_block(x, n_in, n_out, subsample, phase_train, scope='res_block'):
   with tf.variable_scope(scope):
@@ -158,11 +156,9 @@ def cifar10_input_stream(records_path):
       'image_raw': tf.FixedLenFeature([], tf.string),
       'label': tf.FixedLenFeature([], tf.int64),
     })
-  # features = tf.parse_single_example(record_value,
-  #     dense_keys = ['image_raw', 'label'],
-  #     dense_types = [tf.string, tf.int64])
-  image = tf.decode_raw(features['image_raw'], tf.float32)
-  image = tf.reshape(image, [32, 32, 3])
+  image = tf.decode_raw(features['image_raw'], tf.uint8)
+  image = tf.reshape(image, [32,32,3])
+  image = tf.cast(image, tf.float32)
   label = tf.cast(features['label'], tf.int64)
   return image, label
 
